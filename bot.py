@@ -33,7 +33,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 BRAND = "Zev Hub"
 FOOTER = "Zev Hub • Moderation"
 
-GUILD_ID = 1424741330315378700
+GUILD_ID = 1539039438976585900
 GUILD = discord.Object(id=GUILD_ID)
 
 # Giveaway claim/ticket channel
