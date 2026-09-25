@@ -30,16 +30,16 @@ logger = logging.getLogger("ZevHub")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-BRAND = "Zev Hub"
-FOOTER = "Zev Hub • Moderation"
+BRAND = "ZeHub"
+FOOTER = "ZeHub • Moderation"
 
 GUILD_ID = 1539039438976585900
 GUILD = discord.Object(id=GUILD_ID)
 
 # Giveaway claim/ticket channel
 CLAIM_TICKET_URL = "https://discord.com/channels/1424741330315378700/1544028216027521034"
-GIVEAWAY_IMAGE_FILE = "axonic-giveaways.jpeg"
-GIVEAWAY_IMAGE_NAME = "axonic-giveaways.jpeg"
+GIVEAWAY_IMAGE_FILE = "ZeHub-giveaways.jpeg"
+GIVEAWAY_IMAGE_NAME = "ZeHub-giveaways.jpeg"
 
 
 def parse_duration(value: str):
