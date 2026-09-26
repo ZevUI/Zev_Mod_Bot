@@ -19,34 +19,64 @@ bot = commands.Bot(
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
-    print(f"Clearing ALL slash commands from guild: {GUILD_ID}")
+    print("========================================")
+    print("ZEHUB COMMAND INSPECTOR")
+    print("========================================")
+    print(f"Logged in as: {bot.user}")
+    print(f"Bot ID: {bot.user.id}")
+    print(f"Guild ID: {GUILD_ID}")
+    print()
 
     guild = discord.Object(id=GUILD_ID)
 
+    # ----------------------------------------
+    # GUILD COMMANDS
+    # ----------------------------------------
+
     try:
-        # Clear every command currently stored in the local tree
-        bot.tree.clear_commands(guild=guild)
+        guild_commands = await bot.tree.fetch_commands(guild=guild)
 
-        # Sync the EMPTY tree to Discord.
-        # This is what actually removes the commands from Discord.
-        commands_after = await bot.tree.sync(guild=guild)
+        print("========== GUILD COMMANDS ==========")
+        print(f"Total: {len(guild_commands)}")
+        print()
 
-        print("========================================")
-        print("GUILD COMMAND CLEANUP COMPLETE")
-        print("========================================")
-        print(f"Commands remaining: {len(commands_after)}")
-
-        if len(commands_after) == 0:
-            print("SUCCESS: All guild commands have been removed.")
-        else:
-            print("WARNING: Some commands are still registered.")
+        for command in guild_commands:
+            print(
+                f"/{command.name} | "
+                f"ID: {command.id} | "
+                f"Description: {command.description}"
+            )
 
     except Exception as error:
-        print("========================================")
-        print("COMMAND CLEANUP FAILED")
-        print("========================================")
-        print(error)
+        print(f"Guild command error: {error}")
+
+    print()
+
+    # ----------------------------------------
+    # GLOBAL COMMANDS
+    # ----------------------------------------
+
+    try:
+        global_commands = await bot.tree.fetch_commands()
+
+        print("========== GLOBAL COMMANDS ==========")
+        print(f"Total: {len(global_commands)}")
+        print()
+
+        for command in global_commands:
+            print(
+                f"/{command.name} | "
+                f"ID: {command.id} | "
+                f"Description: {command.description}"
+            )
+
+    except Exception as error:
+        print(f"Global command error: {error}")
+
+    print()
+    print("========================================")
+    print("INSPECTION COMPLETE")
+    print("========================================")
 
     await bot.close()
 
