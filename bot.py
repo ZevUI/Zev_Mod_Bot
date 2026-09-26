@@ -21,11 +21,11 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-logger = logging.getLogger("ZevHub")
+logger = logging.getLogger("ZeHub")
 
 
 # =========================================================
-# ZEV HUB CONFIG
+# ZEHUB CONFIG
 # =========================================================
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -33,13 +33,69 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 BRAND = "ZeHub"
 FOOTER = "ZeHub • Moderation"
 
-GUILD_ID = 1539039438976585900
+
+def get_required_int_env(name, default=None):
+    value = os.getenv(name)
+
+    if not value and default is not None:
+        value = str(default)
+
+    if not value:
+        raise RuntimeError(f"{name} is not set in Railway Variables.")
+
+    try:
+        return int(value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a valid Discord ID.") from error
+
+
+def get_optional_int_env(name):
+    value = os.getenv(name)
+
+    if not value or not value.strip():
+        return None
+
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning("%s is not a valid Discord ID. Ignoring it.", name)
+        return None
+
+
+# Keep the current server as the fallback, while allowing Railway to
+# override it later without editing the Python file.
+GUILD_ID = get_required_int_env(
+    "GUILD_ID",
+    1539039438976585900
+)
 GUILD = discord.Object(id=GUILD_ID)
 
-# Giveaway claim/ticket channel
-CLAIM_TICKET_URL = "https://discord.com/channels/1424741330315378700/1544028216027521034"
+# Optional giveaway claim/ticket URL. Leave blank if you do not use it yet.
+CLAIM_TICKET_URL = os.getenv("CLAIM_TICKET_URL", "").strip()
+if CLAIM_TICKET_URL and not CLAIM_TICKET_URL.startswith(("http://", "https://")):
+    logger.warning("CLAIM_TICKET_URL is not a valid HTTP/HTTPS URL. Disabling it.")
+    CLAIM_TICKET_URL = ""
+
 GIVEAWAY_IMAGE_FILE = "ZeHub-giveaways.jpeg"
 GIVEAWAY_IMAGE_NAME = "ZeHub-giveaways.jpeg"
+
+# Optional reaction-role configuration. If these are not set, reaction roles
+# are simply disabled instead of causing the bot to fail on startup.
+REACTION_ROLE_MESSAGE_ID = get_optional_int_env("REACTION_ROLE_MESSAGE_ID")
+REACTION_ROLE_CHANNEL_ID = get_optional_int_env("REACTION_ROLE_CHANNEL_ID")
+
+_REACTION_ROLE_ENV = {
+    "💻": "ROLE_COMPUTER_ID",
+    "📢": "ROLE_ANNOUNCEMENTS_ID",
+    "🎥": "ROLE_VIDEOS_ID",
+    "🎁": "ROLE_GIVEAWAYS_ID"
+}
+
+REACTION_ROLES = {
+    emoji: role_id
+    for emoji, env_name in _REACTION_ROLE_ENV.items()
+    if (role_id := get_optional_int_env(env_name)) is not None
+}
 
 
 def parse_duration(value: str):
@@ -511,7 +567,7 @@ LOG_CHOICES = [
 
 logs_group = app_commands.Group(
     name="logs",
-    description="Configure Zev Hub logging"
+    description="Configure ZeHub logging"
 )
 
 
@@ -655,7 +711,7 @@ async def logs_list(
     )
 
     embed = discord.Embed(
-        title="📋 Zev Hub Logging",
+        title="📋 ZeHub Logging",
         description="Current logging configuration.",
         color=discord.Color.blurple()
     )
@@ -745,7 +801,7 @@ async def logs_reset(
     )
 
     await interaction.response.send_message(
-        "✅ All Zev Hub logging has been disabled "
+        "✅ All ZeHub logging has been disabled "
         "for this server.",
         ephemeral=True
     )
@@ -761,20 +817,12 @@ bot.tree.add_command(
 # REACTION ROLES
 # =========================================================
 
-REACTION_ROLE_MESSAGE_ID = 1548082945573650444
-
-REACTION_ROLE_CHANNEL_ID = 1548075290423595099
-
-
-REACTION_ROLES = {
-    "💻": 1548086296977604648,
-    "📢": 1548086430633431061,
-    "🎥": 1548086556273942538,
-    "🎁": 1548086141427650561
-}
-
 
 async def setup_reaction_roles():
+
+    if not REACTION_ROLE_MESSAGE_ID or not REACTION_ROLE_CHANNEL_ID or not REACTION_ROLES:
+        logger.info("Reaction roles are disabled because their Railway variables are not configured.")
+        return
 
     channel = bot.get_channel(
         REACTION_ROLE_CHANNEL_ID
@@ -848,6 +896,9 @@ async def handle_reaction_role(
     payload,
     adding
 ):
+
+    if not REACTION_ROLE_MESSAGE_ID or not REACTION_ROLES:
+        return
 
     if payload.guild_id != GUILD_ID:
         return
@@ -1100,13 +1151,15 @@ class GiveawayClaimView(discord.ui.View):
 
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(
-            discord.ui.Button(
-                label="🎟️ Claim Giveaway",
-                style=discord.ButtonStyle.link,
-                url=CLAIM_TICKET_URL
+
+        if CLAIM_TICKET_URL:
+            self.add_item(
+                discord.ui.Button(
+                    label="🎟️ Claim Giveaway",
+                    style=discord.ButtonStyle.link,
+                    url=CLAIM_TICKET_URL
+                )
             )
-        )
 
 
 class GiveawayEndedView(GiveawayClaimView):
@@ -1283,8 +1336,12 @@ async def finish_giveaway(
             f"🎁 **Prize**\n{giveaway['prize']}\n\n"
             f"🏆 **Winner(s)**\n{mentions}\n\n"
             f"👥 **Entries**\n`{len(entries)}`\n\n"
-            "🎟️ **Winners:** click **Claim Giveaway** below, "
-            "open a ticket, and say **Giveaway Winner**."
+            + (
+                "🎟️ **Winners:** click **Claim Giveaway** below, open a ticket, "
+                "and say **Giveaway Winner**."
+                if CLAIM_TICKET_URL
+                else "🎟️ **Winners:** contact the server staff to claim your prize."
+            )
         ),
         color=discord.Color.green()
     )
@@ -1318,8 +1375,12 @@ async def finish_giveaway(
             f"🏆 **GIVEAWAY WINNER{'S' if len(winners) != 1 else ''}!**\n\n"
             f"{mentions}\n\n"
             f"🎁 **Prize:** {giveaway['prize']}\n"
-            "🎟️ **Claim your prize:** Click **Claim Giveaway**, "
-            "open a ticket, and say **Giveaway Winner**."
+            + (
+                "🎟️ **Claim your prize:** Click **Claim Giveaway**, open a ticket, "
+                "and say **Giveaway Winner**."
+                if CLAIM_TICKET_URL
+                else "🎟️ **Claim your prize:** Contact the server staff to claim it."
+            )
         ),
         view=GiveawayClaimView(),
         allowed_mentions=discord.AllowedMentions(users=True)
@@ -1402,7 +1463,7 @@ async def giveaway_timer(
 
 giveaway_group = app_commands.Group(
     name="giveaway",
-    description="Zev Hub giveaway commands"
+    description="ZeHub giveaway commands"
 )
 
 
@@ -1857,8 +1918,12 @@ async def giveaway_reroll(
     await interaction.response.send_message(
         f"🔄 **Giveaway #{giveaway_id} Rerolled!**\n\n"
         f"🏆 New winner(s): {mentions}\n\n"
-        "🎟️ Winners can click **Claim Giveaway** on the giveaway message, "
-        "then open a ticket and say **Giveaway Winner**.",
+        + (
+            "🎟️ Winners can click **Claim Giveaway** on the giveaway message, "
+            "then open a ticket and say **Giveaway Winner**."
+            if CLAIM_TICKET_URL
+            else "🎟️ Winners should contact the server staff to claim the prize."
+        ),
         view=GiveawayClaimView(),
         allowed_mentions=discord.AllowedMentions(users=True)
     )
@@ -2060,6 +2125,15 @@ async def poj_add(
 
         await interaction.response.send_message(
             "❌ The POJ message cannot be empty.",
+            ephemeral=True
+        )
+
+        return
+
+    if len(message) > 2000:
+
+        await interaction.response.send_message(
+            "❌ The POJ message must be 2000 characters or fewer.",
             ephemeral=True
         )
 
@@ -2593,7 +2667,7 @@ bot.tree.add_command(
 
 @bot.tree.command(
     name="ping",
-    description="Check Zev Hub bot latency",
+    description="Check ZeHub bot latency",
     guild=GUILD
 )
 async def ping(
@@ -2605,7 +2679,7 @@ async def ping(
     )
 
     embed = discord.Embed(
-        title="🏓 Zev Hub",
+        title="🏓 ZeHub",
         description=(
             f"**Pong!**\n\n"
             f"🤖 Bot latency: `{latency}ms`\n"
@@ -2629,7 +2703,7 @@ async def ping(
 
 @bot.tree.command(
     name="announce",
-    description="Create an Zev Hub announcement",
+    description="Create a ZeHub announcement",
     guild=GUILD
 )
 @app_commands.checks.has_permissions(
@@ -2644,7 +2718,7 @@ async def ping(
 async def announce(
     interaction: discord.Interaction,
     message: str,
-    title: str = "📢 Zev Hub Announcement",
+    title: str = "📢 ZeHub Announcement",
     role: discord.Role = None,
     image: str = None
 ):
@@ -2686,7 +2760,7 @@ async def announce(
     if interaction.client.user:
 
         embed.set_author(
-            name="Zev Hub",
+            name="ZeHub",
             icon_url=interaction.client.user.display_avatar.url
         )
 
@@ -2711,7 +2785,7 @@ async def announce(
         )
 
     embed.set_footer(
-        text="Zev Hub • Announcements"
+        text="ZeHub • Announcements"
     )
 
     content = (
@@ -2743,7 +2817,7 @@ async def announce(
         interaction.guild,
         "announcements",
         "📢 Announcement Created",
-        "A new Zev Hub announcement was created.",
+        "A new ZeHub announcement was created.",
         discord.Color.blurple(),
         [
             (
@@ -2798,7 +2872,7 @@ async def dm(
     interaction: discord.Interaction,
     member: discord.Member,
     message: str,
-    title: str = "✉️ Message from Zev Hub"
+    title: str = "✉️ Message from ZeHub"
 ):
 
     try:
@@ -2829,7 +2903,7 @@ async def dm(
             interaction.guild,
             "dm",
             "✉️ DM Sent",
-            "A moderator sent a DM through Zev Hub.",
+            "A moderator sent a DM through ZeHub.",
             discord.Color.blurple(),
             [
                 (
@@ -3825,7 +3899,7 @@ async def clear(
     )
 
     await interaction.followup.send(
-        f"🧹 **Zev Hub Moderation**\n"
+        f"🧹 **ZeHub Moderation**\n"
         f"Deleted **{len(deleted)}** messages.",
         ephemeral=True
     )
@@ -4024,7 +4098,7 @@ async def avatar(
 
 @bot.tree.command(
     name="say",
-    description="Make Zev Hub send a message",
+    description="Make ZeHub send a message",
     guild=GUILD
 )
 @app_commands.checks.has_permissions(
@@ -4366,7 +4440,7 @@ class HelpView(discord.ui.View):
         category_name, commands = self.pages[self.page]
 
         embed = discord.Embed(
-            title="🛠️ Zev Hub • Help",
+            title="🛠️ ZeHub • Help",
             description=(
                 f"**{category_name}**\n"
                 "Commands currently available in this category."
@@ -4455,7 +4529,7 @@ class HelpView(discord.ui.View):
 
 @bot.tree.command(
     name="help",
-    description="Show all Zev Hub commands",
+    description="Show all ZeHub commands",
     guild=GUILD
 )
 async def help_command(
@@ -4497,7 +4571,7 @@ async def on_app_command_error(
 
         message = (
             "❌ You don't have permission "
-            "to use this Zev Hub command."
+            "to use this ZeHub command."
         )
 
         logger.warning(
